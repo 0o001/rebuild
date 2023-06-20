@@ -37,6 +37,7 @@ import org.apache.commons.lang.math.NumberUtils;
 import org.springframework.util.Assert;
 
 import java.math.BigDecimal;
+import java.time.temporal.TemporalAccessor;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashSet;
@@ -254,7 +255,7 @@ public class AdvFilterParser extends SetUser {
         }
 
         String op = item.getString("op");
-        String value = useValueOfVarRecord(item.getString("value"));
+        String value = useValueOfVarRecord(item.getString("value"), fieldMeta);
         String valueEnd = null;
 
         // exists ( in (...) )
@@ -495,7 +496,7 @@ public class AdvFilterParser extends SetUser {
         // 区间
         final boolean isBetween = op.equalsIgnoreCase(ParseHelper.BW);
         if (isBetween && valueEnd == null) {
-            valueEnd = useValueOfVarRecord(item.getString("value2"));
+            valueEnd = useValueOfVarRecord(item.getString("value2"), fieldMeta);
             valueEnd = parseValue(valueEnd, op, fieldMeta, true);
             if (valueEnd == null) valueEnd = value;
         }
@@ -652,31 +653,59 @@ public class AdvFilterParser extends SetUser {
 
     // 字段变量 {@FIELD}
     private static final String PATT_FIELDVAR = "\\{@([\\w.]+)}";
+    // `当前`变量（当前日期、时间、用户）
+    private static final String CURRENT_ANY = "CURRENT";
 
-    private String useValueOfVarRecord(String value) {
-        if (varRecord == null || StringUtils.isBlank(value)) return value;
-        if (!value.matches(PATT_FIELDVAR)) return value;
+    private String useValueOfVarRecord(String value, Field queryField) {
+        if (StringUtils.isBlank(value) || !value.matches(PATT_FIELDVAR)) return value;
 
-        String fieldName = value.substring(2, value.length() - 1);
-        Field field = MetadataHelper.getLastJoinField(rootEntity, fieldName);
-        if (field == null) {
-            log.warn("Invalid var-field : {} in {}", value, rootEntity.getName());
-            return StringUtils.EMPTY;
+        // {@FIELD}
+        final String fieldName = value.substring(2, value.length() - 1);
+
+        Object useValue = null;
+
+        // {@CURRENT} DATE
+        if (CURRENT_ANY.equals(fieldName)) {
+            DisplayType dt = EasyMetaFactory.getDisplayType(queryField);
+            if (dt == DisplayType.DATE || dt == DisplayType.DATETIME || dt == DisplayType.TIME) {
+                useValue = CalendarUtils.now();
+            } else {
+                log.warn("Cannot use `CURRENT` in `{}` (None date fields)", queryField);
+                return StringUtils.EMPTY;
+            }
+        }
+        // {@CURRENT.} USER
+        if (fieldName.startsWith(CURRENT_ANY + ".")) {
+            String userField = fieldName.substring(CURRENT_ANY.length() + 1);
+            Object[] o = Application.getQueryFactory().uniqueNoFilter(getUser(), userField);
+            if (o == null || o[0] == null) return StringUtils.EMPTY;
+            else useValue = o[0];
         }
 
-        Object[] o = Application.getQueryFactory().uniqueNoFilter(varRecord, fieldName);
-        if (o == null || o[0] == null) return StringUtils.EMPTY;
+        if (useValue == null) {
+            if (varRecord == null) return value;
 
-        Object v = o[0];
+            Field valueField = MetadataHelper.getLastJoinField(rootEntity, fieldName);
+            if (valueField == null) {
+                log.warn("Invalid var-field : {} in {}", value, rootEntity.getName());
+                return StringUtils.EMPTY;
+            }
 
-        if (v instanceof Date) {
-            v = CalendarUtils.getUTCDateFormat().format(v);
-        } else if (v instanceof BigDecimal) {
-            v = String.valueOf(((BigDecimal) v).doubleValue());
+            Object[] o = Application.getQueryFactory().uniqueNoFilter(varRecord, fieldName);
+            if (o == null || o[0] == null) return StringUtils.EMPTY;
+            else useValue = o[0];
+        }
+
+        if (useValue instanceof Date) {
+            useValue = CalendarUtils.getUTCDateFormat().format(useValue);
+        } else if (useValue instanceof TemporalAccessor) {
+            useValue = CalendarUtils.getDateFormat("HH:mm").format(CalendarUtils.now());
+        } else if (useValue instanceof BigDecimal) {
+            useValue = String.valueOf(((BigDecimal) useValue).doubleValue());
         } else {
-            v = String.valueOf(v);
+            useValue = String.valueOf(useValue);
         }
-        return (String) v;
+        return (String) useValue;
     }
 
     /**
@@ -744,7 +773,7 @@ public class AdvFilterParser extends SetUser {
      *
      * @param filterExpr
      * @return
-     * @see #useValueOfVarRecord(String)
+     * @see #useValueOfVarRecord(String, Field)
      */
     public static boolean hasFieldVars(JSONObject filterExpr) {
         for (Object o : filterExpr.getJSONArray("items")) {

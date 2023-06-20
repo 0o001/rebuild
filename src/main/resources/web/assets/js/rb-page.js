@@ -8,7 +8,7 @@ See LICENSE and COMMERCIAL in the project root for license information.
 /* !!! KEEP IT ES5 COMPATIBLE !!! */
 
 // GA
-;(function () {
+(function () {
   const gaScript = document.createElement('script')
   gaScript.src = 'https://www.googletagmanager.com/gtag/js?id=G-ZCZHJPMEG7'
   gaScript.async = true
@@ -423,7 +423,7 @@ var _showNotification = function () {
  */
 var _initGlobalSearch = function () {
   $('.global-search2>a').on('click', function () {
-    _showGlobalSearch()
+    _showGlobalSearch($storage.get('GlobalSearch-gs'))
     $('.search-container input')[0].focus()
     setTimeout(function () {
       $('.search-container .dropdown-toggle').dropdown('toggle')
@@ -445,6 +445,7 @@ var _initGlobalSearch = function () {
 
   var $es = $gs.find('a').on('click', function () {
     var s = $('.search-input-gs').val()
+    $storage.set('GlobalSearch-gs', s || '')
     location.href = $(this).data('url') + ($(this).hasClass('QUERY') ? '?' : '#') + 'gs=' + $encode(s)
   })
   if ($es.length === 0) return
@@ -699,7 +700,7 @@ var $initReferenceSelect2 = function (el, options) {
     },
     language: {
       noResults: function () {
-        return (search_input || '').length > 0 ? $L('未找到结果') : $L('输入关键词搜索')
+        return $.trim(search_input).length > 0 ? $L('未找到结果') : $L('输入关键词搜索')
       },
       inputTooShort: function () {
         return $L('输入关键词搜索')

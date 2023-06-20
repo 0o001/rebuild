@@ -130,6 +130,10 @@ class RbFormModal extends React.Component {
       })
 
       this.__lastModified = res.data.lastModified || 0
+
+      setTimeout(() => {
+        formModel.alertMessage && RbHighbar.create(formModel.alertMessage)
+      }, 1000)
     })
   }
 
@@ -790,7 +794,7 @@ class RbFormElement extends React.Component {
     if (!props.onView) {
       // 必填字段
       if (!this.state.nullable && $empty(props.value) && props.readonlyw !== 2) {
-        props.$$$parent.setFieldValue(props.field, null, $L('%s 不能为空', props.label))
+        props.$$$parent.setFieldValue(props.field, null, $L('%s不能为空', props.label))
       }
 
       this.onEditModeChanged()
@@ -1872,12 +1876,14 @@ class RbFormReference extends RbFormElement {
       return props.getCascadingFieldValue(this)
     }
 
-    // FIXME v3.3.2 在多级级联中会同时存在父子级，以父级为准
+    // v3.3.2 在多级级联中会同时存在父子级
     let cascadingField
     if (props._cascadingFieldParent) {
       cascadingField = props._cascadingFieldParent.split('$$$$')[0]
     } else if (props._cascadingFieldChild) {
       cascadingField = props._cascadingFieldChild.split('$$$$')[0]
+      // v3.3.3 明细作为子级时不控制，因为选择后明细关联字段会清空
+      if (cascadingField && cascadingField.includes('.')) return null
     }
     if (!cascadingField) return null
 
@@ -1962,7 +1968,7 @@ class RbFormReference extends RbFormElement {
       that._ReferenceSearcher.hide()
     }
 
-    const url = `${rb.baseUrl}/commons/search/reference-search?field=${this.props.field}.${this.props.$$$parent.props.entity}&cascadingValue=${this._getCascadingFieldValue() || ''}`
+    const url = `${rb.baseUrl}/app/entity/reference-search?field=${this.props.field}.${this.props.$$$parent.props.entity}&cascadingValue=${this._getCascadingFieldValue() || ''}`
     if (!this._ReferenceSearcher_Url) this._ReferenceSearcher_Url = url
 
     if (this._ReferenceSearcher && this._ReferenceSearcher_Url === url) {
